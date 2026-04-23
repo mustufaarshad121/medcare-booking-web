@@ -47,3 +47,28 @@ export interface BookingFormData {
   timeSlot: string | null;
   patientPhone: string;
 }
+
+export interface DoctorWithFee extends Doctor {
+  consultation_fee: number;
+  is_available: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  is_admin: boolean;
+  is_blocked: boolean;
+  push_token: string | null;
+  created_at: string;
+  appointment_count?: number;
+}
+
+export interface NotificationLog {
+  id: string;
+  title: string;
+  body: string;
+  target: string;
+  sent_by: string | null;
+  sent_at: string;
+}
