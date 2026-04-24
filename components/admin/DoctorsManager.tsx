@@ -3,26 +3,36 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, X, RefreshCw, Stethoscope } from 'lucide-react';
 import type { DoctorWithFee } from '@/lib/types';
-import { SPECIALTIES, CLINIC_LOCATIONS } from '@/lib/data';
+import { SPECIALTIES } from '@/lib/data';
 
-const AVATAR_COLORS = [
+const PALETTE = [
   '#c0392b','#2980b9','#27ae60','#16a085',
   '#e67e22','#8e44ad','#d35400','#0f3460',
 ];
 
-interface Form {
-  name: string; specialty: string; location: string; bio: string;
-  avatar_color: string; consultation_fee: string; is_available: boolean;
+function avatarColor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return PALETTE[Math.abs(h) % PALETTE.length];
 }
-
-const EMPTY: Form = {
-  name: '', specialty: 'Cardiology', location: 'New York',
-  bio: '', avatar_color: AVATAR_COLORS[0], consultation_fee: '150', is_available: true,
-};
 
 function initials(name: string) {
   return name.replace('Dr. ', '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 }
+
+interface Form {
+  name: string;
+  specialty: string;
+  bio: string;
+  consultation_fee: string;
+  is_available: boolean;
+  experience_years: string;
+}
+
+const EMPTY: Form = {
+  name: '', specialty: 'Cardiology', bio: '',
+  consultation_fee: '150', is_available: true, experience_years: '0',
+};
 
 export default function DoctorsManager({ initialDoctors }: { initialDoctors: DoctorWithFee[] }) {
   const [doctors, setDoctors] = useState<DoctorWithFee[]>(initialDoctors);
@@ -36,9 +46,12 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
   function openAdd() { setEdit(null); setForm(EMPTY); setErr(''); setModal(true); }
   function openEdit(d: DoctorWithFee) {
     setEdit(d);
-    setForm({ name: d.name, specialty: d.specialty, location: d.location,
-      bio: d.bio ?? '', avatar_color: d.avatar_color ?? AVATAR_COLORS[0],
-      consultation_fee: String(d.consultation_fee), is_available: d.is_available });
+    setForm({
+      name: d.name, specialty: d.specialty, bio: d.bio ?? '',
+      consultation_fee: String(d.consultation_fee),
+      is_available: d.is_available,
+      experience_years: String(d.experience_years ?? 0),
+    });
     setErr(''); setModal(true);
   }
   function setF<K extends keyof Form>(k: K, v: Form[K]) { setForm(f => ({ ...f, [k]: v })); }
@@ -47,18 +60,31 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
     if (!form.name.trim()) { setErr('Name is required.'); return; }
     const fee = parseInt(form.consultation_fee, 10);
     if (isNaN(fee) || fee < 0) { setErr('Enter a valid consultation fee.'); return; }
+    const exp = parseInt(form.experience_years, 10);
     setSaving(true); setErr('');
     try {
-      const payload = { name: form.name.trim(), specialty: form.specialty, location: form.location,
-        bio: form.bio.trim(), avatar_color: form.avatar_color, consultation_fee: fee, is_available: form.is_available };
+      const payload = {
+        name: form.name.trim(),
+        specialty: form.specialty,
+        bio: form.bio.trim(),
+        consultation_fee: fee,
+        is_available: form.is_available,
+        experience_years: isNaN(exp) ? 0 : exp,
+      };
       if (edit) {
-        const res = await fetch(`/api/admin/doctors/${edit.id}`, { method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const res = await fetch(`/api/admin/doctors/${edit.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
         if (!res.ok) throw new Error((await res.json()).error ?? 'Update failed');
         setDoctors(prev => prev.map(d => d.id === edit.id ? ({ ...d, ...payload } as DoctorWithFee) : d));
       } else {
-        const res = await fetch('/api/admin/doctors', { method: 'POST',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const res = await fetch('/api/admin/doctors', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
         if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed');
         const { doctor } = await res.json();
         setDoctors(prev => [doctor as DoctorWithFee, ...prev]);
@@ -81,8 +107,11 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
 
   async function toggleAvailable(d: DoctorWithFee) {
     try {
-      const res = await fetch(`/api/admin/doctors/${d.id}`, { method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_available: !d.is_available }) });
+      const res = await fetch(`/api/admin/doctors/${d.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_available: !d.is_available }),
+      });
       if (!res.ok) throw new Error();
       setDoctors(prev => prev.map(x => x.id === d.id ? { ...x, is_available: !d.is_available } : x));
     } catch { alert('Update failed'); }
@@ -105,18 +134,20 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
           <div key={doc.id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all">
             <div className="flex items-start gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0 shadow-sm"
-                style={{ backgroundColor: doc.avatar_color ?? '#0f3460' }}>
+                style={{ backgroundColor: avatarColor(doc.name) }}>
                 {initials(doc.name)}
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-gray-900 truncate text-sm">{doc.name}</h3>
                 <p className="text-xs text-gray-500 mt-0.5">{doc.specialty}</p>
-                <p className="text-xs text-gray-400">{doc.location}</p>
+                {doc.experience_years != null && (
+                  <p className="text-xs text-gray-400">{doc.experience_years} yrs experience</p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
-                ${doc.consultation_fee ?? 0}
+                ${doc.consultation_fee}
               </span>
               <button onClick={() => toggleAvailable(doc)}
                 className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
@@ -166,20 +197,24 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
                   className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] focus:border-transparent bg-gray-50" />
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Specialty</label>
+                <select value={form.specialty} onChange={e => setF('specialty', e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] bg-gray-50">
+                  {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Specialty</label>
-                  <select value={form.specialty} onChange={e => setF('specialty', e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] bg-gray-50">
-                    {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Consultation Fee ($)</label>
+                  <input type="number" value={form.consultation_fee} onChange={e => setF('consultation_fee', e.target.value)} min="0"
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] bg-gray-50" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Location</label>
-                  <select value={form.location} onChange={e => setF('location', e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] bg-gray-50">
-                    {CLINIC_LOCATIONS.map(l => <option key={l.city} value={l.city}>{l.city}</option>)}
-                  </select>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Experience (Years)</label>
+                  <input type="number" value={form.experience_years} onChange={e => setF('experience_years', e.target.value)} min="0"
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] bg-gray-50" />
                 </div>
               </div>
 
@@ -188,23 +223,6 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
                 <textarea value={form.bio} onChange={e => setF('bio', e.target.value)} rows={3}
                   placeholder="Professional background and specializations…"
                   className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] resize-none bg-gray-50" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Consultation Fee ($)</label>
-                <input type="number" value={form.consultation_fee} onChange={e => setF('consultation_fee', e.target.value)} min="0"
-                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] bg-gray-50" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Avatar Color</label>
-                <div className="flex gap-2 flex-wrap">
-                  {AVATAR_COLORS.map(c => (
-                    <button key={c} onClick={() => setF('avatar_color', c)}
-                      className={`w-8 h-8 rounded-full transition-all ${form.avatar_color === c ? 'scale-125 ring-2 ring-offset-2 ring-gray-400' : 'hover:scale-110'}`}
-                      style={{ backgroundColor: c }} />
-                  ))}
-                </div>
               </div>
 
               <div className="flex items-center justify-between py-3 border-t border-gray-100">

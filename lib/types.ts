@@ -48,19 +48,25 @@ export interface BookingFormData {
   patientPhone: string;
 }
 
-export interface DoctorWithFee extends Doctor {
+export interface DoctorWithFee {
+  id: string;
+  name: string;
+  specialty: string;
+  bio: string | null;
   consultation_fee: number;
   is_available: boolean;
+  experience_years: number | null;
 }
 
 export interface UserProfile {
   id: string;
   email: string | null;
   full_name: string | null;
-  is_admin: boolean;
-  is_blocked: boolean;
-  push_token: string | null;
+  phone: string | null;
   created_at: string;
+  is_admin?: boolean;
+  is_blocked?: boolean;
+  push_token?: string | null;
   appointment_count?: number;
 }
 

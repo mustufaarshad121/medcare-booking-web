@@ -17,14 +17,21 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (guard(request)) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   const body = await request.json();
-  const { name, specialty, location, bio, avatar_color, consultation_fee, is_available } = body;
-  if (!name?.trim() || !specialty || !location) {
-    return NextResponse.json({ error: 'name, specialty, location are required' }, { status: 400 });
+  const { name, specialty, bio, consultation_fee, is_available, experience_years } = body;
+  if (!name?.trim() || !specialty) {
+    return NextResponse.json({ error: 'name and specialty are required' }, { status: 400 });
   }
   const service = createServiceClient();
   const { data, error } = await service
     .from('doctors')
-    .insert({ name: name.trim(), specialty, location, bio: bio ?? '', avatar_color: avatar_color ?? '#0f3460', consultation_fee: consultation_fee ?? 150, is_available: is_available ?? true })
+    .insert({
+      name: name.trim(),
+      specialty,
+      bio: bio ?? '',
+      consultation_fee: consultation_fee ?? 150,
+      is_available: is_available ?? true,
+      experience_years: experience_years ?? 0,
+    })
     .select('*')
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
