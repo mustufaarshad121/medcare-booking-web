@@ -6,18 +6,23 @@ function guard(req: NextRequest) {
   return req.cookies.get(ADMIN_SESSION_COOKIE)?.value !== ADMIN_SESSION_VALUE;
 }
 
+const FIELDS = 'id, name, specialty, bio, consultation_fee, is_available, experience_years, location';
+
 export async function GET(request: NextRequest) {
   if (guard(request)) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   const service = createServiceClient();
-  const { data, error } = await service.from('doctors').select('*').order('specialty');
+  const { data, error } = await service
+    .from('doctors')
+    .select(FIELDS)
+    .order('specialty');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ doctors: data });
+  return NextResponse.json({ doctors: data ?? [] });
 }
 
 export async function POST(request: NextRequest) {
   if (guard(request)) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   const body = await request.json();
-  const { name, specialty, bio, consultation_fee, is_available, experience_years } = body;
+  const { name, specialty, bio, consultation_fee, is_available, experience_years, location } = body;
   if (!name?.trim() || !specialty) {
     return NextResponse.json({ error: 'name and specialty are required' }, { status: 400 });
   }
@@ -31,8 +36,9 @@ export async function POST(request: NextRequest) {
       consultation_fee: consultation_fee ?? 150,
       is_available: is_available ?? true,
       experience_years: experience_years ?? 0,
+      location: location || 'New York',
     })
-    .select('*')
+    .select(FIELDS)
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ doctor: data }, { status: 201 });

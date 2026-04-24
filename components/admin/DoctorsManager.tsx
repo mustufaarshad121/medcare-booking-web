@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, X, RefreshCw, Stethoscope } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, RefreshCw, Stethoscope, MapPin } from 'lucide-react';
 import type { DoctorWithFee } from '@/lib/types';
 import { SPECIALTIES } from '@/lib/data';
+
+const LOCATIONS = ['New York', 'Los Angeles', 'Chicago'] as const;
 
 const PALETTE = [
   '#c0392b','#2980b9','#27ae60','#16a085',
@@ -27,12 +29,30 @@ interface Form {
   consultation_fee: string;
   is_available: boolean;
   experience_years: string;
+  location: string;
 }
 
 const EMPTY: Form = {
   name: '', specialty: 'Cardiology', bio: '',
   consultation_fee: '150', is_available: true, experience_years: '0',
+  location: 'New York',
 };
+
+async function broadcastNewDoctor(doctor: DoctorWithFee) {
+  try {
+    await fetch('/api/admin/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'New Specialist Available!',
+        body: `${doctor.name} (${doctor.specialty}) has joined our team${doctor.location ? ` at the ${doctor.location} clinic` : ''}. Book your appointment today.`,
+        target: 'all',
+      }),
+    });
+  } catch {
+    // non-critical — don't block the UI
+  }
+}
 
 export default function DoctorsManager({ initialDoctors }: { initialDoctors: DoctorWithFee[] }) {
   const [doctors, setDoctors] = useState<DoctorWithFee[]>(initialDoctors);
@@ -51,6 +71,7 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
       consultation_fee: String(d.consultation_fee),
       is_available: d.is_available,
       experience_years: String(d.experience_years ?? 0),
+      location: d.location ?? 'New York',
     });
     setErr(''); setModal(true);
   }
@@ -70,6 +91,7 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
         consultation_fee: fee,
         is_available: form.is_available,
         experience_years: isNaN(exp) ? 0 : exp,
+        location: form.location,
       };
       if (edit) {
         const res = await fetch(`/api/admin/doctors/${edit.id}`, {
@@ -88,6 +110,7 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
         if (!res.ok) throw new Error((await res.json()).error ?? 'Create failed');
         const { doctor } = await res.json();
         setDoctors(prev => [doctor as DoctorWithFee, ...prev]);
+        broadcastNewDoctor(doctor as DoctorWithFee);
       }
       setModal(false);
     } catch (e) { setErr(e instanceof Error ? e.message : 'Save failed'); }
@@ -145,7 +168,7 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
               <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
                 ${doc.consultation_fee}
               </span>
@@ -155,6 +178,12 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
                 {doc.is_available ? '✓ Available' : '✗ Unavailable'}
               </button>
             </div>
+            {doc.location && (
+              <div className="flex items-center gap-1.5 mb-3">
+                <MapPin size={11} className="text-gray-400 flex-shrink-0" />
+                <span className="text-xs text-gray-500">{doc.location}</span>
+              </div>
+            )}
             {doc.bio && <p className="text-xs text-gray-400 line-clamp-2 mb-4">{doc.bio}</p>}
             <div className="flex gap-2 pt-3 border-t border-gray-50">
               <button onClick={() => openEdit(doc)}
@@ -197,12 +226,21 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
                   className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] focus:border-transparent bg-gray-50" />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Specialty</label>
-                <select value={form.specialty} onChange={e => setF('specialty', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] bg-gray-50">
-                  {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Specialty</label>
+                  <select value={form.specialty} onChange={e => setF('specialty', e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] bg-gray-50">
+                    {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Location</label>
+                  <select value={form.location} onChange={e => setF('location', e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085] bg-gray-50">
+                    {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -235,6 +273,12 @@ export default function DoctorsManager({ initialDoctors }: { initialDoctors: Doc
                   <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${form.is_available ? 'translate-x-6' : ''}`} />
                 </button>
               </div>
+
+              {!edit && (
+                <p className="text-xs text-gray-400 bg-blue-50 border border-blue-100 rounded-xl px-3.5 py-2.5">
+                  A &quot;New Specialist Available&quot; notification will be sent to all users automatically.
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">

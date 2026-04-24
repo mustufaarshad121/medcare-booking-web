@@ -56,6 +56,7 @@ export interface DoctorWithFee {
   consultation_fee: number;
   is_available: boolean;
   experience_years: number | null;
+  location: string | null;
 }
 
 export interface UserProfile {
