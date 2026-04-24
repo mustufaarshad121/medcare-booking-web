@@ -36,7 +36,23 @@ CREATE POLICY "Profiles: owner update" ON public.profiles
     (auth.jwt() ->> 'email') = 'mustufa.dex@gmail.com'
   );
 
--- ── 3. Notification logs ──────────────────────────────────────────────────
+-- ── 3. Notifications ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  message    text        NOT NULL,
+  type       text        NOT NULL DEFAULT 'info',
+  target     text        NOT NULL DEFAULT 'all',
+  sent_by    text        NOT NULL DEFAULT 'admin',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Notifications: admin only" ON public.notifications;
+CREATE POLICY "Notifications: admin only" ON public.notifications
+  FOR ALL USING ((auth.jwt() ->> 'email') = 'mustufa.dex@gmail.com');
+
+-- ── 3b. Notification logs (legacy) ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.notification_logs (
   id       uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   title    text        NOT NULL,

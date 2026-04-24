@@ -10,27 +10,32 @@ export async function GET(request: NextRequest) {
   if (guard(request)) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   const service = createServiceClient();
   const { data, error } = await service
-    .from('notification_logs')
+    .from('notifications')
     .select('*')
-    .order('sent_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(50);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ logs: data ?? [] });
+  return NextResponse.json({ notifications: data ?? [] });
 }
 
 export async function POST(request: NextRequest) {
   if (guard(request)) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   const body = await request.json();
-  const { title, body: msgBody, target } = body;
-  if (!title?.trim() || !msgBody?.trim()) {
-    return NextResponse.json({ error: 'title and body are required' }, { status: 400 });
+  const { message, type, target } = body;
+  if (!message?.trim()) {
+    return NextResponse.json({ error: 'message is required' }, { status: 400 });
   }
   const service = createServiceClient();
   const { data, error } = await service
-    .from('notification_logs')
-    .insert({ title: title.trim(), body: msgBody.trim(), target: target ?? 'all' })
+    .from('notifications')
+    .insert({
+      message: message.trim(),
+      type: type ?? 'info',
+      target: target ?? 'all',
+      sent_by: 'admin',
+    })
     .select('*')
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ log: data }, { status: 201 });
+  return NextResponse.json({ notification: data }, { status: 201 });
 }
