@@ -3,30 +3,35 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
+import { collection, getDocs, limit, query } from 'firebase/firestore';
+import { onAuthStateChanged, type User } from 'firebase/auth';
+import { db, auth } from '@/lib/firebase';
 import type { Doctor } from '@/lib/types';
 import { getInitials } from '@/lib/data';
-import { createClient } from '@/lib/supabase/client';
 import Button from '@/components/ui/Button';
 
-interface DoctorsSectionProps {
-  isLoggedIn: boolean;
-}
-
-export default function DoctorsSection({ isLoggedIn }: DoctorsSectionProps) {
+export default function DoctorsSection({ isLoggedIn: _initial }: { isLoggedIn: boolean }) {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    let supabase: ReturnType<typeof createClient>;
-    try {
-      supabase = createClient();
-    } catch {
-      return; // Supabase not configured
-    }
-    supabase
-      .from('doctors')
-      .select('*')
-      .limit(3)
-      .then(({ data }) => setDoctors((data as Doctor[]) ?? []));
+    return onAuthStateChanged(auth, setUser);
+  }, []);
+
+  useEffect(() => {
+    getDocs(query(collection(db, 'doctors'), limit(3))).then(snap => {
+      setDoctors(snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          name: data.name,
+          specialty: data.specialty,
+          bio: data.bio ?? null,
+          location: data.location,
+          avatar_color: data.avatarColor ?? data.avatar_color ?? '#0f3460',
+        } as Doctor;
+      }));
+    }).catch(() => {});
   }, []);
 
   return (
@@ -59,10 +64,8 @@ export default function DoctorsSection({ isLoggedIn }: DoctorsSectionProps) {
               {d.bio && (
                 <p className="text-[#64748b] text-sm leading-relaxed mb-5 line-clamp-3">{d.bio}</p>
               )}
-              <Link href={isLoggedIn ? '/book' : '/login'} className="mt-auto">
-                <Button variant="secondary" size="sm">
-                  Book Now
-                </Button>
+              <Link href={user ? '/book' : '/login'} className="mt-auto">
+                <Button variant="secondary" size="sm">Book Now</Button>
               </Link>
             </div>
           ))}

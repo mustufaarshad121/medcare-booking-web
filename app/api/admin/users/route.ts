@@ -1,27 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { adminDb } from '@/lib/firebase-admin';
 import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_VALUE } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {
   if (request.cookies.get(ADMIN_SESSION_COOKIE)?.value !== ADMIN_SESSION_VALUE) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
-  const service = createServiceClient();
-  const [profilesRes, apptRes] = await Promise.all([
-    service.from('profiles').select('*').order('created_at', { ascending: false }),
-    service.from('appointments').select('user_id'),
-  ]);
-  if (profilesRes.error) return NextResponse.json({ error: profilesRes.error.message }, { status: 500 });
 
-  const countMap: Record<string, number> = {};
-  (apptRes.data ?? []).forEach((a: { user_id: string }) => {
-    countMap[a.user_id] = (countMap[a.user_id] ?? 0) + 1;
-  });
+  try {
+    const [usersSnap, apptsSnap] = await Promise.all([
+      adminDb.collection('users').orderBy('createdAt', 'desc').get(),
+      adminDb.collection('appointments').get(),
+    ]);
 
-  const profiles = (profilesRes.data ?? []).map((p: Record<string, unknown>) => ({
-    ...p,
-    appointment_count: countMap[p.id as string] ?? 0,
-  }));
+    const countMap: Record<string, number> = {};
+    apptsSnap.docs.forEach(d => {
+      const uid = d.data().userId;
+      if (uid) countMap[uid] = (countMap[uid] ?? 0) + 1;
+    });
 
-  return NextResponse.json({ profiles });
+    const profiles = usersSnap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        email: data.email ?? null,
+        full_name: data.fullName ?? null,
+        phone: data.phone ?? null,
+        created_at: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+        appointment_count: countMap[d.id] ?? 0,
+      };
+    });
+
+    return NextResponse.json({ profiles });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
 }

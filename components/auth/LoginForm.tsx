@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import Button from '@/components/ui/Button';
 
 export default function LoginForm() {
@@ -16,27 +17,15 @@ export default function LoginForm() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    let supabase: ReturnType<typeof createClient>;
     try {
-      supabase = createClient();
+      await signInWithEmailAndPassword(auth, email, password);
+      router.push('/');
+      router.refresh();
     } catch {
-      setError('Database not configured. Please add your Supabase credentials to .env.local');
-      setLoading(false);
-      return;
-    }
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
       setError('Invalid email or password. Please try again.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.push('/');
-    router.refresh();
   };
 
   return (
@@ -47,9 +36,7 @@ export default function LoginForm() {
         </div>
       )}
       <div>
-        <label className="block text-sm font-medium text-[#1a202c] mb-1">
-          Email Address
-        </label>
+        <label className="block text-sm font-medium text-[#1a202c] mb-1">Email Address</label>
         <input
           type="email"
           value={email}
@@ -60,9 +47,7 @@ export default function LoginForm() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-[#1a202c] mb-1">
-          Password
-        </label>
+        <label className="block text-sm font-medium text-[#1a202c] mb-1">Password</label>
         <input
           type="password"
           value={password}

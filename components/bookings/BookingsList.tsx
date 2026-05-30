@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Appointment } from '@/lib/types';
+import { authFetch } from '@/lib/auth-utils';
 import BookingCard from './BookingCard';
 import Button from '@/components/ui/Button';
 import { CalendarPlus } from 'lucide-react';
@@ -13,7 +14,7 @@ export default function BookingsList() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/appointments')
+    authFetch('/api/appointments')
       .then((r) => r.json())
       .then((d) => setAppointments(d.appointments ?? []))
       .catch(() => setError('Failed to load appointments.'))

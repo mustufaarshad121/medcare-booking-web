@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_VALUE } from '@/lib/admin-auth';
-import { createServiceClient } from '@/lib/supabase/server';
+import { adminDb } from '@/lib/firebase-admin';
 import SettingsPanel from '@/components/admin/SettingsPanel';
 
 export const metadata = { title: 'Settings — MedCare Admin' };
@@ -10,12 +10,11 @@ export default async function SettingsPage() {
   const cookieStore = await cookies();
   if (cookieStore.get(ADMIN_SESSION_COOKIE)?.value !== ADMIN_SESSION_VALUE) redirect('/admin/login');
 
-  const service = createServiceClient();
   let settings: Record<string, string> = {};
   try {
-    const { data } = await service.from('app_settings').select('*');
-    (data ?? []).forEach((s: { key: string; value: string }) => { settings[s.key] = s.value; });
-  } catch { /* table not set up yet */ }
+    const snap = await adminDb.collection('appSettings').get();
+    snap.docs.forEach(d => { settings[d.id] = d.data().value ?? ''; });
+  } catch {}
 
   return (
     <div>

@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
+import { adminDb } from '@/lib/firebase-admin';
+import { verifyUser } from '@/lib/verify-auth';
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
+  const decoded = await verifyUser(request);
+  if (!decoded) {
     return NextResponse.json({ error: 'UNAUTHORIZED', message: 'Authentication required' }, { status: 401 });
   }
 
@@ -18,34 +17,25 @@ export async function PATCH(
     return NextResponse.json({ error: 'INVALID_STATUS', message: 'Only cancellation is allowed' }, { status: 400 });
   }
 
-  // Fetch appointment — RLS ensures it belongs to this user
-  const { data: existing } = await supabase
-    .from('appointments')
-    .select('id, status, user_id')
-    .eq('id', id)
-    .single();
+  try {
+    const docRef = adminDb.collection('appointments').doc(id);
+    const existing = await docRef.get();
 
-  if (!existing) {
-    return NextResponse.json({ error: 'NOT_FOUND', message: 'Appointment not found' }, { status: 404 });
-  }
-  if (existing.user_id !== user.id) {
-    return NextResponse.json({ error: 'FORBIDDEN', message: 'Access denied' }, { status: 403 });
-  }
-  if (existing.status === 'cancelled') {
-    return NextResponse.json({ error: 'ALREADY_CANCELLED', message: 'Appointment is already cancelled' }, { status: 409 });
-  }
+    if (!existing.exists) {
+      return NextResponse.json({ error: 'NOT_FOUND', message: 'Appointment not found' }, { status: 404 });
+    }
 
-  const service = createServiceClient();
-  const { data, error } = await service
-    .from('appointments')
-    .update({ status: 'cancelled' })
-    .eq('id', id)
-    .select('id, status')
-    .single();
+    const data = existing.data()!;
+    if (data.userId !== decoded.uid) {
+      return NextResponse.json({ error: 'FORBIDDEN', message: 'Access denied' }, { status: 403 });
+    }
+    if (data.status === 'cancelled') {
+      return NextResponse.json({ error: 'ALREADY_CANCELLED', message: 'Appointment is already cancelled' }, { status: 409 });
+    }
 
-  if (error) {
-    return NextResponse.json({ error: 'DB_ERROR', message: error.message }, { status: 500 });
+    await docRef.update({ status: 'cancelled' });
+    return NextResponse.json({ appointment: { id, status: 'cancelled' } });
+  } catch (err) {
+    return NextResponse.json({ error: 'DB_ERROR', message: String(err) }, { status: 500 });
   }
-
-  return NextResponse.json({ appointment: data });
 }

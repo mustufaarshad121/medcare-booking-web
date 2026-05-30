@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_VALUE } from '@/lib/admin-auth'
-import { createServiceClient } from '@/lib/supabase/server'
+import { adminDb } from '@/lib/firebase-admin'
 import DoctorsManager from '@/components/admin/DoctorsManager'
 import type { DoctorWithFee } from '@/lib/types'
 import { Stethoscope, CheckCircle } from 'lucide-react'
@@ -12,15 +12,26 @@ export default async function DoctorsPage() {
   const cookieStore = await cookies()
   if (cookieStore.get(ADMIN_SESSION_COOKIE)?.value !== ADMIN_SESSION_VALUE) redirect('/admin/login')
 
-  const service = createServiceClient()
   let doctors: DoctorWithFee[] = []
 
   try {
-    const { data } = await service.from('doctors').select('*').order('specialty')
-    doctors = (data ?? []) as DoctorWithFee[]
+    const snap = await adminDb.collection('doctors').orderBy('specialty').get()
+    doctors = snap.docs.map(d => {
+      const data = d.data()
+      return {
+        id: d.id,
+        name: data.name,
+        specialty: data.specialty,
+        bio: data.bio ?? null,
+        consultation_fee: data.consultationFee ?? data.consultation_fee ?? 150,
+        is_available: data.isAvailable ?? data.is_available ?? true,
+        experience_years: data.experienceYears ?? data.experience_years ?? null,
+        location: data.location ?? null,
+      } as DoctorWithFee
+    })
   } catch {}
 
-  const available = doctors.filter(d => d.is_available === true).length
+  const available = doctors.filter(d => d.is_available).length
 
   return (
     <div>

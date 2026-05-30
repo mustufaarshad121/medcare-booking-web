@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import Button from '@/components/ui/Button';
 
 export default function RegisterForm() {
@@ -16,39 +18,34 @@ export default function RegisterForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
     if (password.length < 8) {
       setError('Password must be at least 8 characters.');
       return;
     }
-
     setLoading(true);
-    let supabase: ReturnType<typeof createClient>;
     try {
-      supabase = createClient();
-    } catch {
-      setError('Database not configured. Please add your Supabase credentials to .env.local');
-      setLoading(false);
-      return;
-    }
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
-    });
-
-    if (signUpError) {
-      if (signUpError.message.toLowerCase().includes('already')) {
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(user, { displayName: fullName.trim() });
+      await setDoc(doc(db, 'users', user.uid), {
+        email: user.email,
+        fullName: fullName.trim(),
+        phone: null,
+        createdAt: serverTimestamp(),
+      });
+      router.push('/');
+      router.refresh();
+    } catch (err: unknown) {
+      const msg = (err as { code?: string })?.code ?? '';
+      if (msg.includes('email-already-in-use')) {
         setError('An account with this email already exists.');
+      } else if (msg.includes('weak-password')) {
+        setError('Password is too weak. Use at least 8 characters.');
       } else {
-        setError(signUpError.message);
+        setError('Registration failed. Please try again.');
       }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    router.push('/');
-    router.refresh();
   };
 
   return (
@@ -59,9 +56,7 @@ export default function RegisterForm() {
         </div>
       )}
       <div>
-        <label className="block text-sm font-medium text-[#1a202c] mb-1">
-          Full Name
-        </label>
+        <label className="block text-sm font-medium text-[#1a202c] mb-1">Full Name</label>
         <input
           type="text"
           value={fullName}
@@ -72,9 +67,7 @@ export default function RegisterForm() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-[#1a202c] mb-1">
-          Email Address
-        </label>
+        <label className="block text-sm font-medium text-[#1a202c] mb-1">Email Address</label>
         <input
           type="email"
           value={email}
@@ -85,9 +78,7 @@ export default function RegisterForm() {
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-[#1a202c] mb-1">
-          Password
-        </label>
+        <label className="block text-sm font-medium text-[#1a202c] mb-1">Password</label>
         <input
           type="password"
           value={password}

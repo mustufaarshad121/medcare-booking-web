@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { adminDb } from '@/lib/firebase-admin';
 import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_VALUE } from '@/lib/admin-auth';
 
 function guard(req: NextRequest) {
@@ -8,14 +8,26 @@ function guard(req: NextRequest) {
 
 export async function GET(request: NextRequest) {
   if (guard(request)) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
-  const service = createServiceClient();
-  const { data, error } = await service
-    .from('notifications')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(50);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ notifications: data ?? [] });
+  try {
+    const snap = await adminDb.collection('notifications')
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+    const notifications = snap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        message: data.message,
+        type: data.type ?? 'info',
+        target: data.target ?? 'all',
+        sent_by: data.sentBy ?? 'admin',
+        created_at: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+      };
+    });
+    return NextResponse.json({ notifications });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -25,17 +37,27 @@ export async function POST(request: NextRequest) {
   if (!message?.trim()) {
     return NextResponse.json({ error: 'message is required' }, { status: 400 });
   }
-  const service = createServiceClient();
-  const { data, error } = await service
-    .from('notifications')
-    .insert({
+  try {
+    const ref = adminDb.collection('notifications').doc();
+    const now = new Date();
+    await ref.set({
       message: message.trim(),
       type: type ?? 'info',
       target: target ?? 'all',
-      sent_by: 'admin',
-    })
-    .select('*')
-    .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ notification: data }, { status: 201 });
+      sentBy: 'admin',
+      createdAt: now,
+    });
+    return NextResponse.json({
+      notification: {
+        id: ref.id,
+        message: message.trim(),
+        type: type ?? 'info',
+        target: target ?? 'all',
+        sent_by: 'admin',
+        created_at: now.toISOString(),
+      },
+    }, { status: 201 });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
 }

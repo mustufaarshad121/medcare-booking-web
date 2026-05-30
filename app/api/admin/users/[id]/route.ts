@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { adminDb } from '@/lib/firebase-admin';
 import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_VALUE } from '@/lib/admin-auth';
 
 function guard(req: NextRequest) {
@@ -13,13 +13,27 @@ export async function PATCH(
   if (guard(request)) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   const { id } = await params;
   const body = await request.json();
-  const service = createServiceClient();
-  const { data, error } = await service
-    .from('profiles')
-    .update(body)
-    .eq('id', id)
-    .select('*')
-    .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ profile: data });
+
+  const update: Record<string, unknown> = {};
+  if (body.full_name !== undefined) update.fullName = body.full_name;
+  if (body.phone !== undefined) update.phone = body.phone;
+  if (body.email !== undefined) update.email = body.email;
+
+  try {
+    const ref = adminDb.collection('users').doc(id);
+    await ref.update(update);
+    const updated = await ref.get();
+    const data = updated.data()!;
+    return NextResponse.json({
+      profile: {
+        id,
+        email: data.email ?? null,
+        full_name: data.fullName ?? null,
+        phone: data.phone ?? null,
+        created_at: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
 }

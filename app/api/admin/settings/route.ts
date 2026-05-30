@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { adminDb } from '@/lib/firebase-admin';
 import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_VALUE } from '@/lib/admin-auth';
 
 function guard(req: NextRequest) {
@@ -8,24 +8,30 @@ function guard(req: NextRequest) {
 
 export async function GET(request: NextRequest) {
   if (guard(request)) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
-  const service = createServiceClient();
-  const { data, error } = await service.from('app_settings').select('*');
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const map: Record<string, string> = {};
-  (data ?? []).forEach((s: { key: string; value: string }) => { map[s.key] = s.value; });
-  return NextResponse.json({ settings: map });
+  try {
+    const snap = await adminDb.collection('appSettings').get();
+    const settings: Record<string, string> = {};
+    snap.docs.forEach(d => {
+      settings[d.id] = d.data().value ?? '';
+    });
+    return NextResponse.json({ settings });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: NextRequest) {
   if (guard(request)) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   const updates: Record<string, string> = await request.json();
-  const service = createServiceClient();
-  const upserts = Object.entries(updates).map(([key, value]) => ({
-    key,
-    value,
-    updated_at: new Date().toISOString(),
-  }));
-  const { error } = await service.from('app_settings').upsert(upserts, { onConflict: 'key' });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  try {
+    const batch = adminDb.batch();
+    Object.entries(updates).forEach(([key, value]) => {
+      const ref = adminDb.collection('appSettings').doc(key);
+      batch.set(ref, { value, updatedAt: new Date() }, { merge: true });
+    });
+    await batch.commit();
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
 }

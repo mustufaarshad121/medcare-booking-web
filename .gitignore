@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*.local
+medicare-mobile-firebase-adminsdk-fbsvc-2cf366a6b2.json 

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { Doctor, Specialty, ClinicCity } from '@/lib/types';
 import { SPECIALTIES, CLINIC_LOCATIONS, getMinDate, getMaxDate } from '@/lib/data';
+import { authFetch } from '@/lib/auth-utils';
 import DoctorCard from './DoctorCard';
 import TimeSlotPicker from './TimeSlotPicker';
 import BookingConfirmation from './BookingConfirmation';
@@ -50,9 +51,8 @@ export default function BookingForm({ doctors }: BookingFormProps) {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/appointments', {
+      const res = await authFetch('/api/appointments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           doctor_id: selectedDoctor.id,
           patient_phone: phone,
@@ -98,7 +98,6 @@ export default function BookingForm({ doctors }: BookingFormProps) {
 
   return (
     <div>
-      {/* Step indicator */}
       <div className="flex items-center mb-8">
         {[
           { n: 1, label: 'Choose Doctor' },
@@ -109,9 +108,7 @@ export default function BookingForm({ doctors }: BookingFormProps) {
             <div className="flex flex-col items-center">
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                  stepNum >= n
-                    ? 'bg-[#0f3460] text-white'
-                    : 'bg-gray-200 text-[#64748b]'
+                  stepNum >= n ? 'bg-[#0f3460] text-white' : 'bg-gray-200 text-[#64748b]'
                 }`}
               >
                 {n}
@@ -119,15 +116,12 @@ export default function BookingForm({ doctors }: BookingFormProps) {
               <span className="text-xs mt-1 text-[#64748b] hidden sm:block">{label}</span>
             </div>
             {i < 2 && (
-              <div
-                className={`flex-1 h-0.5 mx-2 ${stepNum > n ? 'bg-[#0f3460]' : 'bg-gray-200'}`}
-              />
+              <div className={`flex-1 h-0.5 mx-2 ${stepNum > n ? 'bg-[#0f3460]' : 'bg-gray-200'}`} />
             )}
           </div>
         ))}
       </div>
 
-      {/* Step 1 — Choose Doctor */}
       {step === 1 && (
         <div>
           <h2 className="text-xl font-semibold text-[#0f3460] mb-4">Choose a Doctor</h2>
@@ -138,9 +132,7 @@ export default function BookingForm({ doctors }: BookingFormProps) {
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085]"
             >
               <option value="">All Specialties</option>
-              {SPECIALTIES.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+              {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             <select
               value={locationFilter}
@@ -148,16 +140,12 @@ export default function BookingForm({ doctors }: BookingFormProps) {
               className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085]"
             >
               <option value="">All Locations</option>
-              {CLINIC_LOCATIONS.map((l) => (
-                <option key={l.city} value={l.city}>{l.city}</option>
-              ))}
+              {CLINIC_LOCATIONS.map((l) => <option key={l.city} value={l.city}>{l.city}</option>)}
             </select>
           </div>
 
           {filteredDoctors.length === 0 ? (
-            <p className="text-[#64748b] text-sm py-8 text-center">
-              No doctors found for the selected filters.
-            </p>
+            <p className="text-[#64748b] text-sm py-8 text-center">No doctors found for the selected filters.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
               {filteredDoctors.map((d) => (
@@ -172,41 +160,29 @@ export default function BookingForm({ doctors }: BookingFormProps) {
           )}
 
           <div className="flex justify-end">
-            <Button
-              onClick={() => setStep(2)}
-              disabled={!canProceedStep1}
-              size="lg"
-            >
+            <Button onClick={() => setStep(2)} disabled={!canProceedStep1} size="lg">
               Next: Date & Time <ChevronRight size={16} />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Step 2 — Date & Time */}
       {step === 2 && (
         <div>
-          <h2 className="text-xl font-semibold text-[#0f3460] mb-4">
-            Select Date & Time
-          </h2>
+          <h2 className="text-xl font-semibold text-[#0f3460] mb-4">Select Date & Time</h2>
           <p className="text-sm text-[#64748b] mb-4">
             Booking with <span className="font-medium text-[#0f3460]">{selectedDoctor?.name}</span>
             {' · '}{selectedDoctor?.specialty}
           </p>
 
           <div className="mb-5">
-            <label className="block text-sm font-medium text-[#1a202c] mb-1">
-              Appointment Date
-            </label>
+            <label className="block text-sm font-medium text-[#1a202c] mb-1">Appointment Date</label>
             <input
               type="date"
               value={selectedDate}
               min={getMinDate()}
               max={getMaxDate()}
-              onChange={(e) => {
-                setSelectedDate(e.target.value);
-                setSelectedSlot('');
-              }}
+              onChange={(e) => { setSelectedDate(e.target.value); setSelectedSlot(''); }}
               className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#16a085]"
             />
             <p className="text-xs text-[#64748b] mt-1">Mon–Fri: 8AM–5PM · Sat: 9AM–1PM · Closed Sundays</p>
@@ -214,14 +190,8 @@ export default function BookingForm({ doctors }: BookingFormProps) {
 
           {selectedDate && (
             <div className="mb-6">
-              <label className="block text-sm font-medium text-[#1a202c] mb-2">
-                Available Time Slots
-              </label>
-              <TimeSlotPicker
-                date={selectedDate}
-                selectedSlot={selectedSlot}
-                onSelect={setSelectedSlot}
-              />
+              <label className="block text-sm font-medium text-[#1a202c] mb-2">Available Time Slots</label>
+              <TimeSlotPicker date={selectedDate} selectedSlot={selectedSlot} onSelect={setSelectedSlot} />
             </div>
           )}
 
@@ -229,23 +199,17 @@ export default function BookingForm({ doctors }: BookingFormProps) {
             <Button variant="ghost" onClick={() => setStep(1)} size="lg">
               <ChevronLeft size={16} /> Back
             </Button>
-            <Button
-              onClick={() => setStep(3)}
-              disabled={!canProceedStep2}
-              size="lg"
-            >
+            <Button onClick={() => setStep(3)} disabled={!canProceedStep2} size="lg">
               Next: Your Details <ChevronRight size={16} />
             </Button>
           </div>
         </div>
       )}
 
-      {/* Step 3 — Patient Details */}
       {step === 3 && selectedDoctor && (
         <div>
           <h2 className="text-xl font-semibold text-[#0f3460] mb-4">Review & Confirm</h2>
 
-          {/* Summary */}
           <div className="bg-[#0f3460]/5 border border-[#0f3460]/10 rounded-xl p-4 mb-5 space-y-2 text-sm">
             <p><span className="text-[#64748b]">Doctor:</span> <span className="font-medium">{selectedDoctor.name}</span></p>
             <p><span className="text-[#64748b]">Specialty:</span> <span className="font-medium">{selectedDoctor.specialty}</span></p>
@@ -255,9 +219,7 @@ export default function BookingForm({ doctors }: BookingFormProps) {
           </div>
 
           <div className="mb-5">
-            <label className="block text-sm font-medium text-[#1a202c] mb-1">
-              Phone Number
-            </label>
+            <label className="block text-sm font-medium text-[#1a202c] mb-1">Phone Number</label>
             <input
               type="tel"
               value={phone}
@@ -278,11 +240,7 @@ export default function BookingForm({ doctors }: BookingFormProps) {
             <Button variant="ghost" onClick={() => setStep(2)} size="lg">
               <ChevronLeft size={16} /> Back
             </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={loading || !phone.trim()}
-              size="lg"
-            >
+            <Button onClick={handleSubmit} disabled={loading || !phone.trim()} size="lg">
               {loading ? 'Booking…' : 'Confirm Appointment'}
             </Button>
           </div>

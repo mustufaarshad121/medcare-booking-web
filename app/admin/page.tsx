@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_VALUE } from '@/lib/admin-auth'
-import { createServiceClient } from '@/lib/supabase/server'
+import { adminDb } from '@/lib/firebase-admin'
 import {
   Calendar, CheckCircle, XCircle,
   Stethoscope, Users, TrendingUp, Award, Activity,
@@ -18,43 +18,45 @@ export const metadata = { title: 'Analytics — MedCare Admin' }
 type RawAppt = {
   id: string
   status: string
-  appointment_date: string
-  doctor_name: string | null
+  appointmentDate: string
+  doctorName: string | null
 }
 
 export default async function AdminDashboardPage() {
   const cookieStore = await cookies()
   if (cookieStore.get(ADMIN_SESSION_COOKIE)?.value !== ADMIN_SESSION_VALUE) redirect('/admin/login')
 
-  const service = createServiceClient()
   const today = new Date()
-
   let appts: RawAppt[] = []
   let totalDoctors = 0
-  let totalUsers   = 0
+  let totalUsers = 0
 
   try {
-    const { data } = await service
-      .from('appointments')
-      .select('id, status, appointment_date, doctor_name')
-    appts = (data ?? []) as RawAppt[]
+    const snap = await adminDb.collection('appointments').get()
+    appts = snap.docs.map(d => {
+      const data = d.data()
+      return {
+        id: d.id,
+        status: data.status ?? 'confirmed',
+        appointmentDate: data.appointmentDate ?? '',
+        doctorName: data.doctorName ?? null,
+      }
+    })
   } catch {}
 
   try {
-    const { count } = await service.from('doctors').select('id', { count: 'exact', head: true })
-    totalDoctors = count ?? 0
+    const snap = await adminDb.collection('doctors').get()
+    totalDoctors = snap.size
   } catch {}
 
   try {
-    const { count } = await service.from('profiles').select('id', { count: 'exact', head: true })
-    totalUsers = count ?? 0
+    const snap = await adminDb.collection('users').get()
+    totalUsers = snap.size
   } catch {}
 
-  /* ── Stats ───────────────────────────────────────────────────────────── */
   const confirmed = appts.filter(a => a.status === 'confirmed')
   const cancelled = appts.filter(a => a.status === 'cancelled')
 
-  /* ── 7-day trend (group by DATE(appointment_date)) ───────────────────── */
   const dayMap: Record<string, number> = {}
   for (let i = 6; i >= 0; i--) {
     const d = new Date(today)
@@ -62,7 +64,7 @@ export default async function AdminDashboardPage() {
     dayMap[d.toISOString().split('T')[0]] = 0
   }
   appts.forEach(a => {
-    const dateKey = a.appointment_date?.split('T')[0] ?? a.appointment_date
+    const dateKey = a.appointmentDate?.split('T')[0] ?? ''
     if (dateKey in dayMap) dayMap[dateKey]++
   })
   const trendData: TrendPoint[] = Object.entries(dayMap).map(([date, count]) => ({
@@ -71,10 +73,9 @@ export default async function AdminDashboardPage() {
     revenue: 0,
   }))
 
-  /* ── Doctor bar chart (group by doctor_name) ─────────────────────────── */
   const docMap: Record<string, DoctorPoint> = {}
   appts.forEach(a => {
-    const name = a.doctor_name ?? 'Unknown'
+    const name = a.doctorName ?? 'Unknown'
     if (!docMap[name]) docMap[name] = { name, appointments: 0, revenue: 0 }
     docMap[name].appointments++
   })
@@ -83,11 +84,10 @@ export default async function AdminDashboardPage() {
     .slice(0, 5)
 
   const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  const medals  = ['bg-amber-400', 'bg-slate-400', 'bg-amber-700', 'bg-slate-500', 'bg-slate-500']
+  const medals = ['bg-amber-400', 'bg-slate-400', 'bg-amber-700', 'bg-slate-500', 'bg-slate-500']
 
   return (
     <div>
-      {/* Sticky header */}
       <div className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between sticky top-0 z-10">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Analytics Overview</h1>
@@ -100,7 +100,6 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="p-8 space-y-8">
-        {/* KPI Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
           <StatsCard title="Total Bookings" value={appts.length.toLocaleString()}     bg="bg-blue-50"   border="border-blue-500"   icon={<Calendar    size={20} className="text-blue-600"   />} />
           <StatsCard title="Confirmed"      value={confirmed.length.toLocaleString()} bg="bg-green-50"  border="border-green-500"  icon={<CheckCircle size={20} className="text-green-600"  />} />
@@ -109,7 +108,6 @@ export default async function AdminDashboardPage() {
           <StatsCard title="Users"          value={totalUsers.toLocaleString()}       bg="bg-purple-50" border="border-purple-500" icon={<Users       size={20} className="text-purple-600" />} />
         </div>
 
-        {/* Row 1: Trend (2/3) + Donut (1/3) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
@@ -138,7 +136,6 @@ export default async function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Row 2: Doctor Bookings bar chart */}
         <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -152,7 +149,6 @@ export default async function AdminDashboardPage() {
           <DoctorBookings data={topDoctors} />
         </div>
 
-        {/* Top Performing Doctors table */}
         {topDoctors.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-5">
@@ -177,7 +173,6 @@ export default async function AdminDashboardPage() {
           </div>
         )}
 
-        {/* Empty state */}
         {appts.length === 0 && (
           <div className="bg-gradient-to-r from-blue-50 to-teal-50 border border-blue-100 rounded-2xl p-6 text-center">
             <Calendar size={32} className="text-blue-400 mx-auto mb-2" />

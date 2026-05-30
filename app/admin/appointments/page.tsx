@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_VALUE } from '@/lib/admin-auth'
-import { createServiceClient } from '@/lib/supabase/server'
+import { adminDb } from '@/lib/firebase-admin'
 import AppointmentsTable from '@/components/admin/AppointmentsTable'
 import type { Appointment } from '@/lib/types'
 import { Calendar, CheckCircle, XCircle } from 'lucide-react'
@@ -12,15 +12,34 @@ export default async function AppointmentsPage() {
   const cookieStore = await cookies()
   if (cookieStore.get(ADMIN_SESSION_COOKIE)?.value !== ADMIN_SESSION_VALUE) redirect('/admin/login')
 
-  const service = createServiceClient()
   let appointments: Appointment[] = []
 
   try {
-    const { data } = await service
-      .from('appointments')
-      .select('*, doctor:doctors(*)')
-      .order('appointment_date', { ascending: false })
-    appointments = (data ?? []) as Appointment[]
+    const snap = await adminDb.collection('appointments').orderBy('appointmentDate', 'desc').get()
+    appointments = snap.docs.map(d => {
+      const data = d.data()
+      return {
+        id: d.id,
+        user_id: data.userId,
+        doctor_id: data.doctorId,
+        patient_name: data.patientName,
+        patient_email: data.patientEmail,
+        patient_phone: data.patientPhone,
+        appointment_date: data.appointmentDate,
+        time_slot: data.timeSlot,
+        location: data.location,
+        status: data.status,
+        created_at: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+        doctor: {
+          id: data.doctorId,
+          name: data.doctorName ?? '',
+          specialty: data.doctorSpecialty ?? '',
+          bio: null,
+          location: data.location,
+          avatar_color: data.doctorAvatarColor ?? '#0f3460',
+        },
+      } as Appointment
+    })
   } catch {}
 
   const confirmed = appointments.filter(a => a.status === 'confirmed').length

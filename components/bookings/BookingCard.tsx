@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Calendar, Clock, MapPin } from 'lucide-react';
 import type { Appointment } from '@/lib/types';
 import { formatDate, getInitials } from '@/lib/data';
+import { authFetch } from '@/lib/auth-utils';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import CancelModal from './CancelModal';
@@ -20,9 +21,8 @@ export default function BookingCard({ appointment, onCancelled }: BookingCardPro
   const handleCancel = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/appointments/${appointment.id}`, {
+      const res = await authFetch(`/api/appointments/${appointment.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'cancelled' }),
       });
       if (res.ok) {
@@ -73,12 +73,7 @@ export default function BookingCard({ appointment, onCancelled }: BookingCardPro
         </div>
 
         {appointment.status === 'confirmed' && (
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => setModalOpen(true)}
-            className="shrink-0"
-          >
+          <Button variant="danger" size="sm" onClick={() => setModalOpen(true)} className="shrink-0">
             Cancel
           </Button>
         )}
