@@ -12,31 +12,66 @@ export async function GET(request: NextRequest) {
   const locationFilter = searchParams.get('location');
 
   try {
-    const snap = await adminDb.collection('appointments').orderBy('appointmentDate', 'desc').get();
+    // Fetch all doctors once for lookup
+    const doctorsSnap = await adminDb.collection('doctors').get();
+    const doctorMap: Record<string, { name: string; specialty: string; avatarColor: string }> = {};
+    doctorsSnap.docs.forEach(d => {
+      const data = d.data();
+      doctorMap[d.id] = {
+        name: data.name ?? 'Unknown Doctor',
+        specialty: data.specialty ?? '',
+        avatarColor: data.avatarColor ?? data.avatar_color ?? '#0f3460',
+      };
+    });
+
+    const snap = await adminDb.collection('appointments').get();
+
     let appointments = snap.docs.map(d => {
       const data = d.data();
+
+      // Handle both web format (doctorId, doctorName) and mobile format (doctor_id, no doctorName)
+      const doctorId = data.doctorId ?? data.doctor_id ?? '';
+      const doctorInfo = doctorMap[doctorId];
+
+      const doctorName = data.doctorName ?? doctorInfo?.name ?? 'Unknown';
+      const doctorSpecialty = data.doctorSpecialty ?? doctorInfo?.specialty ?? '';
+      const doctorAvatarColor = data.doctorAvatarColor ?? doctorInfo?.avatarColor ?? '#0f3460';
+
+      // Handle both web format (userId, patientName) and mobile format (user_id, patient_name)
+      const userId = data.userId ?? data.user_id ?? '';
+      const patientName = data.patientName ?? data.patient_name ?? '';
+      const patientEmail = data.patientEmail ?? data.patient_email ?? '';
+      const patientPhone = data.patientPhone ?? data.patient_phone ?? '';
+      const appointmentDate = data.appointmentDate ?? data.appointment_date ?? '';
+      const timeSlot = data.timeSlot ?? data.time_slot ?? '';
+
       return {
         id: d.id,
-        user_id: data.userId,
-        doctor_id: data.doctorId,
-        patient_name: data.patientName,
-        patient_email: data.patientEmail,
-        patient_phone: data.patientPhone,
-        appointment_date: data.appointmentDate,
-        time_slot: data.timeSlot,
-        location: data.location,
-        status: data.status,
-        created_at: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
+        user_id: userId,
+        doctor_id: doctorId,
+        patient_name: patientName,
+        patient_email: patientEmail,
+        patient_phone: patientPhone,
+        appointment_date: appointmentDate,
+        time_slot: timeSlot,
+        location: data.location ?? '',
+        status: data.status ?? 'confirmed',
+        created_at: data.createdAt?.toDate?.()?.toISOString()
+          ?? data.created_at
+          ?? new Date().toISOString(),
         doctor: {
-          id: data.doctorId,
-          name: data.doctorName ?? '',
-          specialty: data.doctorSpecialty ?? '',
+          id: doctorId,
+          name: doctorName,
+          specialty: doctorSpecialty,
           bio: null,
-          location: data.location,
-          avatar_color: data.doctorAvatarColor ?? '#0f3460',
+          location: data.location ?? '',
+          avatar_color: doctorAvatarColor,
         },
       };
     });
+
+    // Sort by date descending
+    appointments.sort((a, b) => b.appointment_date.localeCompare(a.appointment_date));
 
     if (statusFilter) appointments = appointments.filter(a => a.status === statusFilter);
     if (locationFilter) appointments = appointments.filter(a => a.location === locationFilter);
