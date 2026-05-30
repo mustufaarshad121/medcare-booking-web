@@ -32,14 +32,25 @@ export default async function AdminDashboardPage() {
   let totalUsers = 0
 
   try {
+    // Fetch doctors for lookup
+    const doctorsSnap = await adminDb.collection('doctors').get()
+    const doctorMap: Record<string, string> = {}
+    doctorsSnap.docs.forEach(d => {
+      const data = d.data()
+      doctorMap[d.id] = data.name ?? 'Unknown'
+    })
+
     const snap = await adminDb.collection('appointments').get()
     appts = snap.docs.map(d => {
       const data = d.data()
+      const doctorId = data.doctorId ?? data.doctor_id ?? ''
+      const doctorName = data.doctorName ?? data.doctor_name ?? doctorMap[doctorId] ?? 'Unknown'
+      const appointmentDate = data.appointmentDate ?? data.appointment_date ?? ''
       return {
         id: d.id,
         status: data.status ?? 'confirmed',
-        appointmentDate: data.appointmentDate ?? '',
-        doctorName: data.doctorName ?? null,
+        appointmentDate,
+        doctorName,
       }
     })
   } catch {}
