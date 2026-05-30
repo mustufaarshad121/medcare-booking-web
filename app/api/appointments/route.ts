@@ -10,36 +10,62 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const snap = await adminDb.collection('appointments')
-      .where('userId', '==', decoded.uid)
-      .get();
+    // Fetch both web format (userId) and mobile format (user_id)
+    const [snap1, snap2] = await Promise.all([
+      adminDb.collection('appointments').where('userId', '==', decoded.uid).get(),
+      adminDb.collection('appointments').where('user_id', '==', decoded.uid).get(),
+    ]);
 
-    const appointments = snap.docs
-      .map(d => {
-        const data = d.data();
-        return {
-          id: d.id,
-          user_id: data.userId,
-          doctor_id: data.doctorId,
-          patient_name: data.patientName,
-          patient_email: data.patientEmail,
-          patient_phone: data.patientPhone,
-          appointment_date: data.appointmentDate,
-          time_slot: data.timeSlot,
-          location: data.location,
-          status: data.status,
-          created_at: data.createdAt?.toDate?.()?.toISOString() ?? new Date().toISOString(),
-          doctor: {
-            id: data.doctorId,
-            name: data.doctorName ?? '',
-            specialty: data.doctorSpecialty ?? '',
-            bio: null,
-            location: data.location,
-            avatar_color: data.doctorAvatarColor ?? '#0f3460',
-          },
-        };
-      })
-      .sort((a, b) => b.appointment_date.localeCompare(a.appointment_date));
+    // Fetch all doctors for lookup
+    const doctorsSnap = await adminDb.collection('doctors').get();
+    const doctorMap: Record<string, { name: string; specialty: string; avatarColor: string }> = {};
+    doctorsSnap.docs.forEach(d => {
+      const data = d.data();
+      doctorMap[d.id] = {
+        name: data.name ?? '',
+        specialty: data.specialty ?? '',
+        avatarColor: data.avatarColor ?? data.avatar_color ?? '#0f3460',
+      };
+    });
+
+    // Merge and deduplicate
+    const allDocs = [...snap1.docs];
+    const existingIds = new Set(snap1.docs.map(d => d.id));
+    snap2.docs.forEach(d => {
+      if (!existingIds.has(d.id)) allDocs.push(d);
+    });
+
+    const appointments = allDocs.map(d => {
+      const data = d.data();
+
+      const doctorId = data.doctorId ?? data.doctor_id ?? '';
+      const doctorInfo = doctorMap[doctorId];
+      const doctorName = data.doctorName ?? data.doctor_name ?? doctorInfo?.name ?? 'Unknown Doctor';
+      const doctorSpecialty = data.doctorSpecialty ?? data.doctor_specialty ?? doctorInfo?.specialty ?? '';
+      const doctorAvatarColor = data.doctorAvatarColor ?? doctorInfo?.avatarColor ?? '#0f3460';
+
+      return {
+        id: d.id,
+        user_id: data.userId ?? data.user_id ?? '',
+        doctor_id: doctorId,
+        patient_name: data.patientName ?? data.patient_name ?? '',
+        patient_email: data.patientEmail ?? data.patient_email ?? '',
+        patient_phone: data.patientPhone ?? data.patient_phone ?? '',
+        appointment_date: data.appointmentDate ?? data.appointment_date ?? '',
+        time_slot: data.timeSlot ?? data.time_slot ?? '',
+        location: data.location ?? '',
+        status: data.status ?? 'confirmed',
+        created_at: data.createdAt?.toDate?.()?.toISOString() ?? data.created_at ?? new Date().toISOString(),
+        doctor: {
+          id: doctorId,
+          name: doctorName,
+          specialty: doctorSpecialty,
+          bio: null,
+          location: data.location ?? '',
+          avatar_color: doctorAvatarColor,
+        },
+      };
+    }).sort((a, b) => b.appointment_date.localeCompare(a.appointment_date));
 
     return NextResponse.json({ appointments });
   } catch (err) {
@@ -96,21 +122,34 @@ export async function POST(request: NextRequest) {
 
     const ref = adminDb.collection('appointments').doc();
     const now = new Date();
+
+    // Save in both formats for compatibility
     await ref.set({
+      // Web format (camelCase)
       userId: decoded.uid,
       doctorId: doctor_id,
       doctorName: doctorData.name ?? '',
       doctorSpecialty: doctorData.specialty ?? '',
       doctorAvatarColor: doctorData.avatarColor ?? doctorData.avatar_color ?? '#0f3460',
-      doctorLocation: doctorData.location ?? location,
       patientName: decoded.name ?? decoded.email ?? '',
       patientEmail: decoded.email ?? '',
       patientPhone: patient_phone.trim(),
       appointmentDate: appointment_date,
       timeSlot: time_slot,
+      // Mobile format (snake_case) — saved alongside for cross-app compatibility
+      user_id: decoded.uid,
+      doctor_id: doctor_id,
+      doctor_name: doctorData.name ?? '',
+      doctor_specialty: doctorData.specialty ?? '',
+      patient_name: decoded.name ?? decoded.email ?? '',
+      patient_email: decoded.email ?? '',
+      patient_phone: patient_phone.trim(),
+      appointment_date: appointment_date,
+      time_slot: time_slot,
       location,
       status: 'confirmed',
       createdAt: now,
+      created_at: now.toISOString(),
     });
 
     return NextResponse.json({
