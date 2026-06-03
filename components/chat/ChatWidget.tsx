@@ -37,6 +37,13 @@ export default function ChatWidget() {
     if (isOpen) inputRef.current?.focus();
   }, [isOpen]);
 
+  // Wake up Render server when chat opens
+  useEffect(() => {
+    if (isOpen) {
+      fetch('https://jesica-chatbot.onrender.com/', { method: 'GET' }).catch(() => {});
+    }
+  }, [isOpen]);
+
   async function sendMessage() {
     const text = input.trim();
     if (!text || isLoading) return;
@@ -49,7 +56,7 @@ export default function ChatWidget() {
     setIsLoading(true);
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const timer = setTimeout(() => controller.abort(), 90000);
 
     try {
       const res = await fetch('https://jesica-chatbot.onrender.com/chat', {
@@ -65,14 +72,17 @@ export default function ChatWidget() {
         ...prev,
         { id: Date.now().toString(), role: 'assistant', content: data.response, timestamp: new Date() },
       ]);
-    } catch {
+    } catch (err: unknown) {
       clearTimeout(timer);
+      const isTimeout = err instanceof Error && err.name === 'AbortError';
       setMessages(prev => [
         ...prev,
         {
           id: Date.now().toString(),
           role: 'assistant',
-          content: "I'm temporarily unavailable. Please try again in a moment.",
+          content: isTimeout
+            ? "Jesica is still waking up... please send your message again in a few seconds 😊"
+            : "I'm temporarily unavailable. Please try again in a moment.",
           timestamp: new Date(),
         },
       ]);
@@ -106,7 +116,6 @@ export default function ChatWidget() {
         .jesica-send:hover:not(:disabled) { background: #00a381 !important; }
       `}</style>
 
-      {/* Floating action button */}
       <button
         onClick={() => setIsOpen(o => !o)}
         className="jesica-fab"
@@ -132,7 +141,6 @@ export default function ChatWidget() {
         )}
       </button>
 
-      {/* Chat panel */}
       {isOpen && (
         <div
           style={{
@@ -144,7 +152,6 @@ export default function ChatWidget() {
             background: '#fff', zIndex: 1000,
           }}
         >
-          {/* Header */}
           <div style={{
             background: 'linear-gradient(135deg, #00b894 0%, #00cec9 100%)',
             padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
@@ -170,7 +177,6 @@ export default function ChatWidget() {
             </div>
           </div>
 
-          {/* Messages */}
           <div style={{
             flex: 1, overflowY: 'auto', padding: '14px 16px',
             display: 'flex', flexDirection: 'column', gap: 12,
@@ -214,7 +220,6 @@ export default function ChatWidget() {
             <div ref={bottomRef}/>
           </div>
 
-          {/* Input area */}
           <div style={{
             padding: '10px 14px', borderTop: '1px solid #e2e8f0',
             background: '#fff', display: 'flex', gap: 8, alignItems: 'center',
